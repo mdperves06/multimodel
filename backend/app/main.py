@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from app.api import api_router
 from app.config import get_settings
 from app.db import get_engine
 from app.errors import register_error_handlers
@@ -46,6 +47,7 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization"],
     )
     register_error_handlers(app)
+    app.include_router(api_router)
 
     @app.get("/api/health")
     def health() -> dict[str, object]:

@@ -1,3 +1,6 @@
+import contextlib
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -7,9 +10,9 @@ from app.config import get_settings
 from app.db import get_db
 from app.models import User
 from app.schemas.auth import LoginRequest, LoginResponse, RegisterRequest, UserOut
-from app.security.deps import get_current_user, get_token
+from app.security.deps import extract_token, get_current_user
 from app.security.passwords import hash_password, verify_password
-from app.security.tokens import create_access_token, revoke_token
+from app.security.tokens import create_access_token, decode_token, revoke_token
 from app.services.audit import audit
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -68,14 +71,15 @@ def login(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(
-    request: Request,
-    token: str = Depends(get_token),
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> Response:
-    revoke_token(token)
-    audit(db, "auth.logout", user_id=user.id, request=request)
+def logout(request: Request, db: Session = Depends(get_db)) -> Response:
+    """Always clears the cookie, even if the session is already expired or revoked."""
+    token = extract_token(request)
+    if token:
+        payload = decode_token(token)
+        revoke_token(token)
+        if payload is not None:
+            with contextlib.suppress(ValueError):
+                audit(db, "auth.logout", user_id=uuid.UUID(payload["sub"]), request=request)
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     response.delete_cookie(get_settings().cookie_name, path="/")
     return response

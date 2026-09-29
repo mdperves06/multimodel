@@ -102,3 +102,9 @@ def test_auth_rate_limit(client: TestClient, monkeypatch) -> None:  # type: igno
     ]
     assert codes[:3] == [401, 401, 401]
     assert codes[3:] == [429, 429]
+
+
+def test_logout_without_session_still_clears_cookie(client: TestClient) -> None:
+    res = client.post("/api/auth/logout")
+    assert res.status_code == 204
+    assert "acc_session" in res.headers["set-cookie"]

@@ -11,7 +11,7 @@ from app.security.tokens import decode_token
 _UNAUTHORIZED = HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
 
 
-def _extract_token(request: Request) -> str | None:
+def extract_token(request: Request) -> str | None:
     auth = request.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
         return auth[7:].strip()
@@ -19,7 +19,7 @@ def _extract_token(request: Request) -> str | None:
 
 
 def get_token(request: Request) -> str:
-    token = _extract_token(request)
+    token = extract_token(request)
     if not token:
         raise _UNAUTHORIZED
     return token

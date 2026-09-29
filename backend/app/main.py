@@ -5,12 +5,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api import api_router
 from app.config import get_settings
 from app.db import get_engine, get_session_factory
 from app.errors import register_error_handlers
 from app.redis_client import get_redis
+from app.security.bodylimit import body_limit_middleware
 from app.security.csrf import origin_check_middleware
 from app.security.headers import security_headers_middleware
 from app.security.ratelimit import rate_limit_middleware
@@ -48,6 +50,7 @@ def create_app() -> FastAPI:
     )
     # Later registration = outermost. Order: CORS -> headers -> rate limit -> origin check.
     app.middleware("http")(origin_check_middleware)
+    app.middleware("http")(body_limit_middleware)
     app.middleware("http")(rate_limit_middleware)
     app.middleware("http")(security_headers_middleware)
     app.add_middleware(
@@ -57,6 +60,10 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
     )
+    if settings.allowed_host_list != ["*"]:
+        # Internal names stay allowed: container healthchecks and the Next.js proxy use them.
+        hosts = [*settings.allowed_host_list, "localhost", "127.0.0.1", "backend"]
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts)
     register_error_handlers(app)
     app.include_router(api_router)
 

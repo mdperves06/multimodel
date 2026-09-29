@@ -3,7 +3,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -12,6 +12,7 @@ from app.models import User
 from app.schemas.auth import LoginRequest, LoginResponse, RegisterRequest, UserOut
 from app.security.deps import extract_token, get_current_user
 from app.security.passwords import hash_password, verify_password
+from app.security.ratelimit import hit
 from app.security.tokens import create_access_token, decode_token, revoke_token
 from app.services.audit import audit
 
@@ -59,7 +60,18 @@ def register(
 def login(
     body: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)
 ) -> LoginResponse:
-    user = db.scalar(select(User).where(User.email == body.email.lower()))
+    email = body.email.lower()
+    if get_settings().rate_limit_enabled:
+        allowed, retry_after = hit(
+            f"login-email:{email}", get_settings().auth_rate_limit_per_minute
+        )
+        if not allowed:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "Too many attempts for this account. Try again shortly.",
+                headers={"Retry-After": str(retry_after)},
+            )
+    user = db.scalar(select(User).where(User.email == email))
     ok = verify_password(body.password, user.password_hash if user else None)
     if user is None or not ok or not user.is_active:
         audit(db, "auth.login_failed", user_id=user.id if user else None, request=request)
@@ -78,8 +90,10 @@ def logout(request: Request, db: Session = Depends(get_db)) -> Response:
         payload = decode_token(token)
         revoke_token(token)
         if payload is not None:
-            with contextlib.suppress(ValueError):
-                audit(db, "auth.logout", user_id=uuid.UUID(payload["sub"]), request=request)
+            with contextlib.suppress(ValueError, SQLAlchemyError):
+                user_id = uuid.UUID(payload["sub"])
+                if db.get(User, user_id) is not None:  # a deleted user has nothing to audit
+                    audit(db, "auth.logout", user_id=user_id, request=request)
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     response.delete_cookie(get_settings().cookie_name, path="/")
     return response

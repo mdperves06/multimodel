@@ -15,6 +15,8 @@ _lock = threading.Lock()
 _memory: dict[str, tuple[int, int]] = defaultdict(lambda: (0, 0))
 
 _AUTH_PATHS = ("/api/auth/login", "/api/auth/register")
+# Endpoints that trigger paid or outbound provider calls get their own, tighter budget.
+_EXPENSIVE = {("POST", "/api/jobs"): 60, ("POST", "/api/accounts"): 20}
 
 
 def client_ip(request: Request) -> str:
@@ -61,6 +63,8 @@ async def rate_limit_middleware(
         checks = [(f"g:{ip}", s.global_rate_limit_per_minute)]
         if path in _AUTH_PATHS:
             checks.append((f"a:{ip}:{path}", s.auth_rate_limit_per_minute))
+        elif (request.method, path) in _EXPENSIVE:
+            checks.append((f"x:{ip}:{path}", _EXPENSIVE[(request.method, path)]))
         for key, limit in checks:
             allowed, retry_after = hit(key, limit)
             if not allowed:

@@ -1,24 +1,48 @@
+name: ai-control-center
+
+x-backend: &backend
+  build: ./backend
+  restart: unless-stopped
+  environment: &backend-env
+    ENVIRONMENT: ${ENVIRONMENT:-development}
+    DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/ai_control_center
+    REDIS_URL: redis://redis:6379/0
+    JWT_SECRET: ${JWT_SECRET:?Run "python scripts/generate_env.py" to create .env}
+    ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Run "python scripts/generate_env.py" to create .env}
+    CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}
+    TRUST_PROXY: "true"
+    ENABLE_MOCK_PROVIDER: ${ENABLE_MOCK_PROVIDER:-false}
+    OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+    STORAGE_TYPE: ${STORAGE_TYPE:-local}
+    STORAGE_LOCAL_PATH: /data/storage
+  volumes:
+    - storage:/data/storage
+
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ai_control_center
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_control_center"]
       interval: 5s
       timeout: 3s
       retries: 10
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redisdata:/data
     healthcheck:
@@ -28,32 +52,37 @@ services:
       retries: 10
 
   backend:
-    build: ./backend
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ai_control_center
-      REDIS_URL: redis://redis:6379/0
-      CORS_ORIGINS: http://localhost:3000
+    <<: *backend
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
 
+  worker:
+    <<: *backend
+    command: ["python", "-m", "app.workers.worker"]
+    healthcheck:
+      disable: true
+    depends_on:
+      backend:
+        condition: service_healthy
+
   frontend:
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:8000
+        BACKEND_URL: http://backend:8000
+    restart: unless-stopped
     ports:
       - "3000:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   pgdata:
   redisdata:
+  storage:

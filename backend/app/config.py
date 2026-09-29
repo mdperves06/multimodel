@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     jwt_secret: str = ""
     encryption_key: str = ""
     cors_origins: str = "http://localhost:3000"
+    # Comma-separated Host header allowlist; "*" disables the check. Set explicitly in production.
+    allowed_hosts: str = "*"
 
     access_token_minutes: int = 720
     cookie_name: str = "acc_session"
@@ -42,6 +44,10 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    @property
+    def allowed_host_list(self) -> list[str]:
+        return [h.strip() for h in self.allowed_hosts.split(",") if h.strip()] or ["*"]
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -108,3 +108,17 @@ def test_logout_without_session_still_clears_cookie(client: TestClient) -> None:
     res = client.post("/api/auth/logout")
     assert res.status_code == 204
     assert "acc_session" in res.headers["set-cookie"]
+
+
+def test_logout_clears_cookie_even_if_user_no_longer_exists(client: TestClient) -> None:
+    from app.db import get_session_factory
+    from app.models import User
+
+    register(client)
+    with get_session_factory()() as db:
+        db.query(User).delete()
+        db.commit()
+    res = client.post("/api/auth/logout")
+    assert res.status_code == 204
+    assert "acc_session" in res.headers["set-cookie"]
+    assert client.get("/api/auth/me").status_code == 401

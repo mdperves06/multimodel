@@ -16,6 +16,7 @@ from app.security.headers import security_headers_middleware
 from app.security.ratelimit import rate_limit_middleware
 from app.security.redaction import configure_logging
 from app.services.providers import sync_providers
+from app.workers.worker import start_embedded_worker
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             sync_providers(db)
     except Exception:
         logger.exception("provider sync failed (has the database been migrated?)")
+    worker = start_embedded_worker() if get_settings().embedded_worker else None
     yield
+    if worker:
+        worker[1].set()
+        worker[0].join(timeout=5)
 
 
 def create_app() -> FastAPI:

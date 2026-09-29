@@ -19,7 +19,7 @@ It uses **official APIs only**: no cookies, no session-token extraction, no CAPT
 
 ## 1. What it does
 
-- **Register / sign in** with Argon2-hashed passwords and revocable HTTP-only session cookies.
+- **Register / sign in** with Argon2-hashed passwords and revocable HTTP-only session cookies, plus change password and sign out of all devices.
 - **Connect provider accounts** by API key. Keys are verified with the provider, encrypted (Fernet) before storage, and never returned to the browser.
 - **Create jobs** (image generation): choose provider/model or leave them on *Auto*, and pick 1–10 outputs. Requests return immediately; a worker does the slow part.
 - **Auto routing** picks an account that supports the model, has valid credentials, is not inside a provider rate-limit window, and was used least recently.
@@ -147,7 +147,7 @@ cd ../frontend
 npm run check          # lint + typecheck + unit tests + production build
 ```
 
-The backend suite (90 tests) covers registration, login, authorization and isolation between users, provider connection, invalid credentials, job creation, queue processing, provider selection, rate-limit handling, retry logic, result storage, account deletion, security headers, redaction, and migrations. It runs on SQLite with an in-process Redis; provider HTTP is mocked at the transport layer in tests only.
+The backend suite (93 tests) covers registration, login, authorization and isolation between users, provider connection, invalid credentials, job creation, queue processing, provider selection, rate-limit handling, retry logic, result storage, account deletion, security headers, redaction, and migrations. It runs on SQLite with an in-process Redis; provider HTTP is mocked at the transport layer in tests only.
 
 ## 10. Production deployment
 

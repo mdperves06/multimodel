@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { mutate } from "swr";
+import { AccountSecurity } from "@/components/account-security";
 import { ErrorState, PageHeader, TableSkeleton } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -109,6 +110,8 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AccountSecurity />
 
       <Card>
         <CardHeader>

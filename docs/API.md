@@ -20,6 +20,8 @@ Base path: `/api`. JSON in/out. Interactive OpenAPI docs are served at `/docs` w
 | POST | `/auth/login` | `{email, password}` | `200 {user, access_token, token_type}`, `401` generic error |
 | POST | `/auth/logout` | – | `204`; revokes the token and clears the cookie (works even if the session already expired) |
 | GET | `/auth/me` | – | `{id, email, display_name, created_at}` |
+| POST | `/auth/logout-all` | – | `204`; invalidates every session for the user on all devices |
+| POST | `/auth/change-password` | `{current_password, new_password}` | `200` same shape as login (fresh session); `400` if the current password is wrong. All other sessions are signed out |
 
 ## Providers
 

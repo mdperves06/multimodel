@@ -34,6 +34,6 @@ def get_current_user(token: str = Depends(get_token), db: Session = Depends(get_
     except (ValueError, KeyError) as exc:
         raise _UNAUTHORIZED from exc
     user = db.get(User, user_id)
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or payload.get("tv", 0) != user.token_version:
         raise _UNAUTHORIZED
     return user

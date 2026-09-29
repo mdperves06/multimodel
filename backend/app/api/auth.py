@@ -9,7 +9,13 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_db
 from app.models import User
-from app.schemas.auth import LoginRequest, LoginResponse, RegisterRequest, UserOut
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    LoginRequest,
+    LoginResponse,
+    RegisterRequest,
+    UserOut,
+)
 from app.security.deps import extract_token, get_current_user
 from app.security.passwords import hash_password, verify_password
 from app.security.ratelimit import hit
@@ -50,7 +56,7 @@ def register(
         raise HTTPException(
             status.HTTP_409_CONFLICT, "An account with this email already exists"
         ) from None
-    token, ttl = create_access_token(user.id)
+    token, ttl = create_access_token(user.id, user.token_version)
     _set_cookie(response, token, ttl)
     audit(db, "auth.register", user_id=user.id, request=request)
     return LoginResponse(user=UserOut.model_validate(user), access_token=token)
@@ -76,7 +82,7 @@ def login(
     if user is None or not ok or not user.is_active:
         audit(db, "auth.login_failed", user_id=user.id if user else None, request=request)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password")
-    token, ttl = create_access_token(user.id)
+    token, ttl = create_access_token(user.id, user.token_version)
     _set_cookie(response, token, ttl)
     audit(db, "auth.login", user_id=user.id, request=request)
     return LoginResponse(user=UserOut.model_validate(user), access_token=token)
@@ -102,3 +108,44 @@ def logout(request: Request, db: Session = Depends(get_db)) -> Response:
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user)) -> User:
     return user
+
+
+@router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
+def logout_all(
+    request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)
+) -> Response:
+    """Invalidate every session for this user, on all devices."""
+    user.token_version += 1
+    db.commit()
+    audit(db, "auth.logout_all", user_id=user.id, request=request)
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    response.delete_cookie(get_settings().cookie_name, path="/")
+    return response
+
+
+@router.post("/change-password", response_model=LoginResponse)
+def change_password(
+    body: ChangePasswordRequest,
+    request: Request,
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> LoginResponse:
+    """Verify the current password, set a new one, sign out every other session."""
+    allowed, retry_after = hit(f"chpw:{user.id}", 5)
+    if not allowed and get_settings().rate_limit_enabled:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Too many attempts. Try again shortly.",
+            headers={"Retry-After": str(retry_after)},
+        )
+    if not verify_password(body.current_password, user.password_hash):
+        audit(db, "auth.change_password_failed", user_id=user.id, request=request)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Current password is incorrect")
+    user.password_hash = hash_password(body.new_password)
+    user.token_version += 1
+    db.commit()
+    token, ttl = create_access_token(user.id, user.token_version)
+    _set_cookie(response, token, ttl)
+    audit(db, "auth.change_password", user_id=user.id, request=request)
+    return LoginResponse(user=UserOut.model_validate(user), access_token=token)

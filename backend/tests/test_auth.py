@@ -122,3 +122,59 @@ def test_logout_clears_cookie_even_if_user_no_longer_exists(client: TestClient) 
     assert res.status_code == 204
     assert "acc_session" in res.headers["set-cookie"]
     assert client.get("/api/auth/me").status_code == 401
+
+
+def test_logout_all_invalidates_every_session(client: TestClient) -> None:
+    first = register(client)["access_token"]
+    second = client.post(
+        "/api/auth/login", json={"email": "alice@example.com", "password": "s3cret-pass-1"}
+    ).json()["access_token"]
+    client.cookies.clear()
+    h1, h2 = {"Authorization": f"Bearer {first}"}, {"Authorization": f"Bearer {second}"}
+    assert client.get("/api/auth/me", headers=h1).status_code == 200
+    assert client.get("/api/auth/me", headers=h2).status_code == 200
+    assert client.post("/api/auth/logout-all", headers=h1).status_code == 204
+    assert client.get("/api/auth/me", headers=h1).status_code == 401
+    assert client.get("/api/auth/me", headers=h2).status_code == 401
+    # signing in again works
+    res = client.post(
+        "/api/auth/login", json={"email": "alice@example.com", "password": "s3cret-pass-1"}
+    )
+    assert (
+        client.get(
+            "/api/auth/me", headers={"Authorization": f"Bearer {res.json()['access_token']}"}
+        ).status_code
+        == 200
+    )
+
+
+def test_change_password(client: TestClient) -> None:
+    old = register(client)["access_token"]
+    body = {"current_password": "wrong-password-1", "new_password": "brand-new-pass-77"}
+    assert client.post("/api/auth/change-password", json=body).status_code == 400
+
+    weak = {"current_password": "s3cret-pass-1", "new_password": "onlyletterslong"}
+    assert client.post("/api/auth/change-password", json=weak).status_code == 422
+
+    ok = {"current_password": "s3cret-pass-1", "new_password": "brand-new-pass-77"}
+    res = client.post("/api/auth/change-password", json=ok)
+    assert res.status_code == 200
+    assert client.get("/api/auth/me").status_code == 200  # this session got a fresh cookie
+    assert "brand-new" not in res.text
+    # other sessions are signed out; old password no longer works
+    client.cookies.clear()
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {old}"}).status_code == 401
+    bad = client.post(
+        "/api/auth/login", json={"email": "alice@example.com", "password": "s3cret-pass-1"}
+    )
+    assert bad.status_code == 401
+    good = client.post(
+        "/api/auth/login", json={"email": "alice@example.com", "password": "brand-new-pass-77"}
+    )
+    assert good.status_code == 200
+
+
+def test_change_password_requires_auth(client: TestClient) -> None:
+    body = {"current_password": "x", "new_password": "brand-new-pass-77"}
+    assert client.post("/api/auth/change-password", json=body).status_code == 401
+    assert client.post("/api/auth/logout-all").status_code == 401

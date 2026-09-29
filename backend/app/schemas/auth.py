@@ -17,6 +17,19 @@ class RegisterRequest(BaseModel):
         return v
 
 
+def _check_strength(v: str) -> str:
+    if v.isalpha() or v.isdigit():
+        raise ValueError("Password must mix letters with numbers or symbols")
+    return v
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=10, max_length=128)
+
+    _strength = field_validator("new_password")(_check_strength)
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)

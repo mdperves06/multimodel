@@ -11,13 +11,14 @@ from app.redis_client import get_redis
 ALGORITHM = "HS256"
 
 
-def create_access_token(user_id: uuid.UUID) -> tuple[str, int]:
+def create_access_token(user_id: uuid.UUID, token_version: int = 0) -> tuple[str, int]:
     s = get_settings()
     now = utcnow()
     ttl = timedelta(minutes=s.access_token_minutes)
     payload = {
         "sub": str(user_id),
         "jti": uuid.uuid4().hex,
+        "tv": token_version,
         "iat": int(now.timestamp()),
         "exp": int((now + ttl).timestamp()),
     }

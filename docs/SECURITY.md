@@ -10,7 +10,7 @@
 | Area | Implementation |
 | --- | --- |
 | Passwords | Argon2id (`argon2-cffi`), min 10 chars mixing letters with digits/symbols; constant-time-ish login (dummy hash for unknown emails) and one generic error message |
-| Sessions | JWT (HS256, `exp`/`sub`/`jti` required) in an `HttpOnly`, `SameSite=Lax`, `Secure`(prod) cookie. Logout revokes the `jti` in Redis until expiry; if Redis is unreachable, token validation fails closed |
+| Sessions | Per-user token version lets "sign out everywhere" and password changes revoke all sessions at once. JWT (HS256, `exp`/`sub`/`jti` required) in an `HttpOnly`, `SameSite=Lax`, `Secure`(prod) cookie. Logout revokes the `jti` in Redis until expiry; if Redis is unreachable, token validation fails closed |
 | Provider credentials | Verified with the provider, then encrypted with Fernet (AES-128-CBC + HMAC) using `ENCRYPTION_KEY` before insertion. Only the last 4 characters are kept for display. No API returns the key; audit logs and errors never contain it |
 | Authorization | Every private route requires auth and filters by `user_id`; other users' objects return 404 (covered by tests for accounts, jobs, outputs, bulk operations) |
 | Input validation | Pydantic constraints on every body/query (lengths, ranges, regexes, enums); SQLAlchemy parameter binding everywhere; `LIKE` wildcards escaped in gallery search |
@@ -37,9 +37,9 @@
 
 ## Known limitations / not implemented
 
-- No email verification, password reset, or MFA.
+- No email verification, forgotten-password reset, or MFA (these need an outbound email service, which is deployment-specific).
 - Registration reveals whether an email exists (409). Login does not.
-- JWTs cannot be revoked before expiry except through logout (no "sign out everywhere" yet); sessions last 12 hours.
+- Sessions last 12 hours. Single sessions are revoked on logout; "sign out of all devices" and password changes invalidate every session through a per-user token version.
 - Uploaded/generated images are not scanned; they come only from the configured provider.
 - The frontend CSP needs `'unsafe-inline'` scripts because of Next.js hydration; moving to nonces is a future improvement.
 - Local disk storage has no server-side encryption; use an encrypted volume, or enable server-side encryption on your S3/R2 bucket.

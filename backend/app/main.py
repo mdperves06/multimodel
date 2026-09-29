@@ -8,19 +8,25 @@ from sqlalchemy import text
 
 from app.api import api_router
 from app.config import get_settings
-from app.db import get_engine
+from app.db import get_engine, get_session_factory
 from app.errors import register_error_handlers
 from app.redis_client import get_redis
 from app.security.csrf import origin_check_middleware
 from app.security.headers import security_headers_middleware
 from app.security.ratelimit import rate_limit_middleware
 from app.security.redaction import configure_logging
+from app.services.providers import sync_providers
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    try:
+        with get_session_factory()() as db:
+            sync_providers(db)
+    except Exception:
+        logger.exception("provider sync failed (has the database been migrated?)")
     yield
 
 

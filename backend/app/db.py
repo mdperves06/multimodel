@@ -2,7 +2,7 @@ from collections.abc import Iterator
 from functools import lru_cache
 from typing import Any
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -14,7 +14,13 @@ def build_engine(url: str) -> Engine:
         kwargs: dict[str, Any] = {"connect_args": {"check_same_thread": False}}
         if ":memory:" in url or url.endswith("///"):
             kwargs["poolclass"] = StaticPool
-        return create_engine(url, **kwargs)
+        engine = create_engine(url, **kwargs)
+
+        @event.listens_for(engine, "connect")
+        def _enable_fk(dbapi_conn: Any, _: Any) -> None:
+            dbapi_conn.execute("PRAGMA foreign_keys=ON")
+
+        return engine
     return create_engine(url, pool_pre_ping=True)
 
 

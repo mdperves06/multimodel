@@ -5,3 +5,4 @@ mypy>=1.13
 fakeredis>=2.26
 pip-audit>=2.7
 pyyaml>=6
+moto[s3]>=5.0

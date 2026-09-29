@@ -19,3 +19,7 @@ filterwarnings = ["ignore::DeprecationWarning"]
 python_version = "3.12"
 strict = true
 warn_unused_ignores = false
+
+[[tool.mypy.overrides]]
+module = ["boto3", "boto3.*", "botocore.*"]
+ignore_missing_imports = true

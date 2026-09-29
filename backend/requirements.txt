@@ -10,3 +10,4 @@ httpx>=0.28
 argon2-cffi>=23.1
 PyJWT>=2.9
 cryptography>=43
+boto3>=1.35

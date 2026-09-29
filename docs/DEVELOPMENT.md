@@ -70,7 +70,7 @@ Use official APIs/OAuth only. Do not add cookie/session-token flows or anything 
 
 ## Adding a storage backend
 
-Implement `Storage` (`put/get/delete/exists`) in `services/storage.py` (for S3/R2 use boto3; R2 is S3-compatible with a custom endpoint) and return it from `get_storage()` for the matching `STORAGE_TYPE`. Nothing else changes: the DB only stores `storage_key`.
+S3 and R2 are implemented (`S3Storage`, boto3). To add another backend, implement `Storage` (`put/get/delete/exists`; `get` must raise `FileNotFoundError` when missing) in `services/storage.py` and return it from `get_storage()`. Nothing else changes: the DB only stores `storage_key`.
 
 ## Testing notes
 

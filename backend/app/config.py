@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     storage_bucket: str = ""
     storage_access_key: str = ""
     storage_secret_key: str = ""
+    # Required for r2 (https://<account>.r2.cloudflarestorage.com); optional for MinIO etc.
+    storage_endpoint_url: str = ""
+    storage_region: str = "auto"
 
     openai_base_url: str = "https://api.openai.com/v1"
     enable_mock_provider: bool = False

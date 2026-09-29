@@ -42,7 +42,7 @@
 - JWTs cannot be revoked before expiry except through logout (no "sign out everywhere" yet); sessions last 12 hours.
 - Uploaded/generated images are not scanned; they come only from the configured provider.
 - The frontend CSP needs `'unsafe-inline'` scripts because of Next.js hydration; moving to nonces is a future improvement.
-- Local disk storage has no server-side encryption; use an encrypted volume or an S3/R2 backend with SSE.
+- Local disk storage has no server-side encryption; use an encrypted volume, or enable server-side encryption on your S3/R2 bucket.
 
 ## Reporting
 

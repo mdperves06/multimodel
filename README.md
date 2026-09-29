@@ -12,7 +12,7 @@ One central web app for connecting multiple **authorized** AI provider accounts,
      Redis job queue  ─────────►  Worker(s)  ──►  ProviderAdapter ──► OpenAI (official API)
           |                                 |          (mock, future providers…)
      PostgreSQL  ◄──── job state, usage ────+
-                                            └──►  Object storage (local now; S3/R2 pluggable)
+                                            └──►  Object storage (local disk, S3, or R2)
 ```
 
 It uses **official APIs only**: no cookies, no session-token extraction, no CAPTCHA or bot-detection bypass, no scraping, and no attempts to get around provider limits. When a provider answers HTTP 429, the account rests for exactly the window the provider specified.
@@ -38,7 +38,7 @@ It uses **official APIs only**: no cookies, no session-token extraction, no CAPT
 | Queue | Redis list + sorted set (delayed retries) |
 | Workers | `python -m app.workers.worker` (or embedded thread for dev) |
 | Providers | `app/providers/*` adapters behind one interface |
-| Storage | `app/services/storage.py` (local disk; S3/R2 pluggable) |
+| Storage | `app/services/storage.py` (local disk, S3, R2) |
 
 The browser only talks to the Next.js origin; `/api/*` is proxied to FastAPI, so the session cookie is same-origin. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -82,8 +82,8 @@ python scripts/generate_env.py            # creates .env with fresh secrets
 | `ENCRYPTION_KEY` | Fernet key that encrypts provider credentials (required, **back it up**) |
 | `CORS_ORIGINS` / `ALLOWED_HOSTS` | Allowed browser origins / Host headers |
 | `TRUST_PROXY` | Honor `X-Forwarded-For` (only behind a trusted proxy) |
-| `STORAGE_TYPE`, `STORAGE_LOCAL_PATH` | Object storage backend (`local` implemented) |
-| `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY` | Reserved for the S3/R2 backend |
+| `STORAGE_TYPE`, `STORAGE_LOCAL_PATH` | Object storage: `local`, `s3`, or `r2` |
+| `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`, `STORAGE_ENDPOINT_URL`, `STORAGE_REGION` | S3/R2 credentials; the endpoint is required for R2 |
 | `OPENAI_API_KEY` | Only used by the opt-in live check script; users add keys in the UI |
 | `ENABLE_MOCK_PROVIDER` | Development/test-only mock provider (refused in production) |
 | `EMBEDDED_WORKER` | Run the worker inside the API process (dev convenience) |
@@ -147,7 +147,7 @@ cd ../frontend
 npm run check          # lint + typecheck + unit tests + production build
 ```
 
-The backend suite (86 tests) covers registration, login, authorization and isolation between users, provider connection, invalid credentials, job creation, queue processing, provider selection, rate-limit handling, retry logic, result storage, account deletion, security headers, redaction, and migrations. It runs on SQLite with an in-process Redis; provider HTTP is mocked at the transport layer in tests only.
+The backend suite (90 tests) covers registration, login, authorization and isolation between users, provider connection, invalid credentials, job creation, queue processing, provider selection, rate-limit handling, retry logic, result storage, account deletion, security headers, redaction, and migrations. It runs on SQLite with an in-process Redis; provider HTTP is mocked at the transport layer in tests only.
 
 ## 10. Production deployment
 
@@ -161,12 +161,11 @@ Checklist:
 - Set `ENVIRONMENT=production`, a strong `POSTGRES_PASSWORD`, `ALLOWED_HOSTS`, and `CORS_ORIGINS` (the public https origin). The production override requires them.
 - **Back up `ENCRYPTION_KEY` and the Postgres volume.** Without the key, stored provider credentials cannot be decrypted.
 - Run more workers by scaling the service: `docker compose up -d --scale worker=3`.
-- Local-disk storage is per-host. For multi-host deployments implement the `Storage` protocol for S3/R2 first.
+- Local-disk storage is per-host. For multi-host deployments set `STORAGE_TYPE=s3` (or `r2` with `STORAGE_ENDPOINT_URL`) and the bucket credentials.
 - Read [docs/SECURITY.md](docs/SECURITY.md) for the threat model and known limitations.
 
 ## Known limitations
 
 - Image generation is the only task type; the adapter interface is ready for more.
-- S3/R2 storage is designed for but **not implemented**; only local disk is.
 - The OpenAI adapter is verified against mocked HTTP responses matching the documented API; run the live check with your own key to confirm end to end. OpenAI does not expose usage totals to ordinary API keys, so provider-reported usage is shown as unavailable.
 - Jobs lost from Redis (e.g. an unpersisted Redis restart) are not automatically re-queued; use the *Retry* action on stuck jobs.
